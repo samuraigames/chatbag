@@ -54,34 +54,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   db: {
     schema: 'public'
   },
-  global: {
-    headers: {
-      'Connection': 'keep-alive',
-      'Keep-Alive': 'timeout=60, max=100'
-    },
-    fetch: (url, options = {}) => {
-      // Add timeout to all fetch requests - increased to 60 seconds
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 seconds
-      
-      return fetch(url, {
-        ...options,
-        signal: controller.signal,
-        headers: {
-          ...options.headers,
-          // Add custom headers to help with query performance
-          'Prefer': 'return=minimal', // Reduce response size when possible
-        }
-      }).finally(() => {
-        clearTimeout(timeoutId);
-      }).catch(error => {
-        if (error.name === 'AbortError') {
-          throw new Error('Request timeout - please check your internet connection');
-        }
-        throw error;
-      });
-    }
-  },
   realtime: {
     params: {
       eventsPerSecond: 50
