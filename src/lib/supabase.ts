@@ -67,6 +67,11 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       return fetch(url, {
         ...options,
         signal: controller.signal,
+        headers: {
+          ...options.headers,
+          // Add custom headers to help with query performance
+          'Prefer': 'return=minimal', // Reduce response size when possible
+        }
       }).finally(() => {
         clearTimeout(timeoutId);
       }).catch(error => {
