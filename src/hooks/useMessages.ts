@@ -43,20 +43,84 @@ export function useMessages(chatId: string | null) {
     if (!chatId) return;
 
     try {
-      // Optimized query with only needed fields and limited results
-      const { data, error } = await supabase
+      console.log('🔄 Fetching messages for chat:', chatId);
+      
+      // Create a timeout promise that rejects after 45 seconds
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Query timeout - taking too long to fetch messages')), 45000);
+      });
+
+      // Race between the actual query and timeout
+      const queryPromise = supabase
         .from('messages')
         .select('id, content, created_at, sender_id, type, mood, sender:users(id, name, username, avatar_url)')
         .eq('chat_id', chatId)
         .order('created_at', { ascending: false })
         .limit(50);
 
-      if (error) throw error;
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
+
+      if (error) {
+        // Handle specific timeout errors
+        if (error.code === '57014' || error.message?.includes('statement timeout')) {
+          console.warn('⚠️ Database query timeout, retrying with smaller limit...');
+          
+          // Retry with smaller limit and simpler query
+          const { data: retryData, error: retryError } = await supabase
+            .from('messages')
+            .select('id, content, created_at, sender_id, type, mood')
+            .eq('chat_id', chatId)
+            .order('created_at', { ascending: false })
+            .limit(20);
+
+          if (retryError) {
+            throw new Error(`Failed to fetch messages after retry: ${retryError.message}`);
+          }
+
+          // Fetch sender info separately for retry data
+          if (retryData && retryData.length > 0) {
+            const senderIds = [...new Set(retryData.map(msg => msg.sender_id))];
+            const { data: senders } = await supabase
+              .from('users')
+              .select('id, name, username, avatar_url')
+              .in('id', senderIds);
+
+            const messagesWithSenders = retryData.map(msg => ({
+              ...msg,
+              sender: senders?.find(sender => sender.id === msg.sender_id)
+            }));
+
+            setMessages(messagesWithSenders.reverse());
+          } else {
+            setMessages([]);
+          }
+          
+          console.log('✅ Messages fetched successfully after retry');
+          return;
+        }
+        
+        throw error;
+      }
       
       // Reverse the array to show messages in chronological order (oldest first)
       setMessages(data ? data.reverse() : []);
-    } catch (error) {
-      console.error('Error fetching messages:', error);
+      console.log('✅ Messages fetched successfully:', data?.length || 0);
+      
+    } catch (error: any) {
+      console.error('❌ Error fetching messages:', error);
+      
+      // Show user-friendly error message based on error type
+      if (error.message?.includes('timeout') || error.code === '57014') {
+        console.warn('⚠️ Message loading is taking longer than expected');
+        // Don't throw here, just log the warning
+      } else if (error.message?.includes('Failed to fetch')) {
+        console.error('❌ Network error while fetching messages');
+      } else {
+        console.error('❌ Unexpected error:', error.message);
+      }
+      
+      // Set empty messages array on error to prevent infinite loading
+      setMessages([]);
     } finally {
       setLoading(false);
     }
@@ -80,31 +144,35 @@ export function useMessages(chatId: string | null) {
         async (payload) => {
           console.log('🔄 New message received via real-time:', payload);
           
-          // Fetch the complete message with sender info using optimized query
-          const { data } = await supabase
-            .from('messages')
-            .select('id, content, created_at, sender_id, type, mood, sender:users(id, name, username, avatar_url)')
-            .eq('id', payload.new.id)
-            .maybeSingle();
+          try {
+            // Fetch the complete message with sender info using optimized query
+            const { data } = await supabase
+              .from('messages')
+              .select('id, content, created_at, sender_id, type, mood, sender:users(id, name, username, avatar_url)')
+              .eq('id', payload.new.id)
+              .maybeSingle();
 
-          if (data) {
-            setMessages(prev => {
-              // Remove any optimistic message with the same content and sender
-              const filteredPrev = prev.filter(msg => {
-                if (msg.id.startsWith('temp-') && 
-                    msg.content === data.content && 
-                    msg.sender_id === data.sender_id) {
-                  return false;
-                }
-                return true;
+            if (data) {
+              setMessages(prev => {
+                // Remove any optimistic message with the same content and sender
+                const filteredPrev = prev.filter(msg => {
+                  if (msg.id.startsWith('temp-') && 
+                      msg.content === data.content && 
+                      msg.sender_id === data.sender_id) {
+                    return false;
+                  }
+                  return true;
+                });
+                
+                // Check if message already exists to prevent duplicates
+                const exists = filteredPrev.some(msg => msg.id === data.id);
+                if (exists) return filteredPrev;
+                
+                return [...filteredPrev, data];
               });
-              
-              // Check if message already exists to prevent duplicates
-              const exists = filteredPrev.some(msg => msg.id === data.id);
-              if (exists) return filteredPrev;
-              
-              return [...filteredPrev, data];
-            });
+            }
+          } catch (error) {
+            console.error('❌ Error fetching new message details:', error);
           }
         }
       )
@@ -119,17 +187,21 @@ export function useMessages(chatId: string | null) {
         async (payload) => {
           console.log('🔄 Message updated via real-time:', payload);
           
-          // Fetch the complete updated message with sender info using optimized query
-          const { data } = await supabase
-            .from('messages')
-            .select('id, content, created_at, sender_id, type, mood, sender:users(id, name, username, avatar_url)')
-            .eq('id', payload.new.id)
-            .maybeSingle();
+          try {
+            // Fetch the complete updated message with sender info using optimized query
+            const { data } = await supabase
+              .from('messages')
+              .select('id, content, created_at, sender_id, type, mood, sender:users(id, name, username, avatar_url)')
+              .eq('id', payload.new.id)
+              .maybeSingle();
 
-          if (data) {
-            setMessages(prev => 
-              prev.map(msg => msg.id === data.id ? data : msg)
-            );
+            if (data) {
+              setMessages(prev => 
+                prev.map(msg => msg.id === data.id ? data : msg)
+              );
+            }
+          } catch (error) {
+            console.error('❌ Error fetching updated message details:', error);
           }
         }
       )
@@ -193,11 +265,16 @@ export function useMessages(chatId: string | null) {
     // Add optimistic message immediately
     setMessages(prev => [...prev, optimisticMessage]);
 
-    // Send to database with proper error handling
+    // Send to database with proper error handling and timeout
     try {
       console.log('🚀 Sending message to database...');
       
-      const { data, error } = await supabase
+      // Create timeout for message sending
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Message send timeout')), 30000);
+      });
+
+      const insertPromise = supabase
         .from('messages')
         .insert({
           chat_id: chatId,
@@ -208,6 +285,8 @@ export function useMessages(chatId: string | null) {
         })
         .select('id, content, created_at, sender_id, type, mood, sender:users(id, name, username, avatar_url)')
         .single();
+
+      const { data, error } = await Promise.race([insertPromise, timeoutPromise]) as any;
 
       if (error) {
         console.error('❌ Database error:', error);
@@ -240,11 +319,13 @@ export function useMessages(chatId: string | null) {
         )
       );
 
-      // Auto-retry after 2 seconds
-      setTimeout(() => {
-        console.log('🔄 Auto-retrying failed message...');
-        retryMessage(trimmedContent, type, mood, optimisticId);
-      }, 2000);
+      // Auto-retry after 2 seconds for timeout errors
+      if (error.message?.includes('timeout') || error.code === '57014') {
+        setTimeout(() => {
+          console.log('🔄 Auto-retrying failed message...');
+          retryMessage(trimmedContent, type, mood, optimisticId);
+        }, 2000);
+      }
     }
   };
 
@@ -268,6 +349,7 @@ export function useMessages(chatId: string | null) {
     );
 
     try {
+      // Use simpler insert without complex joins for retry
       const { data, error } = await supabase
         .from('messages')
         .insert({
@@ -277,17 +359,32 @@ export function useMessages(chatId: string | null) {
           type,
           mood,
         })
-        .select('id, content, created_at, sender_id, type, mood, sender:users(id, name, username, avatar_url)')
+        .select('id, content, created_at, sender_id, type, mood')
         .single();
 
       if (error) throw error;
 
       console.log('✅ Retry successful:', data);
 
+      // Add sender info manually for retry
+      const messageWithSender = {
+        ...data,
+        sender: {
+          id: user.id,
+          email: user.email || '',
+          name: profile?.name || 'You',
+          username: profile?.username || '',
+          avatar_url: profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`,
+          status_message: profile?.status_message || '',
+          last_active: new Date().toISOString(),
+          created_at: profile?.created_at || new Date().toISOString()
+        }
+      };
+
       // Replace failed message with successful one
       setMessages(prev => 
         prev.map(msg => 
-          msg.id === failedId ? data : msg
+          msg.id === failedId ? messageWithSender : msg
         )
       );
 
