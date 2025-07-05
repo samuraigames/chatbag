@@ -22,11 +22,16 @@ export function useChats() {
     if (!user) return;
 
     try {
-      const { data: chatsData, error } = await supabase
-        .from('chats')
-        .select('*')
-        .contains('participants', [user.id])
-        .order('updated_at', { ascending: false });
+      const { data: chatsData, error } = await Promise.race([
+        supabase
+          .from('chats')
+          .select('*')
+          .contains('participants', [user.id])
+          .order('updated_at', { ascending: false }),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Chats fetch timeout')), 8000)
+        )
+      ]) as any;
 
       if (error) throw error;
 
@@ -36,10 +41,15 @@ export function useChats() {
           const otherUserIds = chat.participants.filter(id => id !== user.id);
           
           if (otherUserIds.length > 0) {
-            const { data: users } = await supabase
-              .from('users')
-              .select('*')
-              .in('id', otherUserIds);
+            const { data: users } = await Promise.race([
+              supabase
+                .from('users')
+                .select('*')
+                .in('id', otherUserIds),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Users fetch timeout')), 5000)
+              )
+            ]) as any;
 
             return {
               ...chat,
@@ -55,6 +65,7 @@ export function useChats() {
       setChats(chatsWithUsers);
     } catch (error) {
       console.error('Error fetching chats:', error);
+      setChats([]); // Set empty array on error
     } finally {
       setLoading(false);
     }

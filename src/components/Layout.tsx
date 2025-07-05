@@ -28,6 +28,10 @@ export function Layout() {
   const handleChatCreated = (chatId: string) => {
     setSelectedChatId(chatId);
     setSidebarOpen(false); // Close sidebar on mobile after selecting chat
+    // Force refresh chats to ensure new chat appears
+    setTimeout(() => {
+      window.location.reload();
+    }, 100);
   };
 
   const handleSelectChat = (chatId: string) => {

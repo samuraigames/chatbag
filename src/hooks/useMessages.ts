@@ -17,20 +17,17 @@ export function useMessages(chatId: string | null) {
           await fetchMessages();
         } catch (error) {
           console.error('Error in loadMessages:', error);
+          setLoading(false);
         }
       };
 
-      // ✅ Load messages once immediately
+      // Load messages immediately
       loadMessages();
-
-      // ⏰ Set up polling every 5 seconds as backup
-      const interval = setInterval(loadMessages, 5000);
 
       // Set up real-time subscription
       const unsubscribe = subscribeToMessages();
       
       return () => {
-        clearInterval(interval);
         unsubscribe();
       };
     } else {
@@ -45,60 +42,21 @@ export function useMessages(chatId: string | null) {
     try {
       console.log('🔄 Fetching messages for chat:', chatId);
       
-      // Create a timeout promise that rejects after 45 seconds
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Query timeout - taking too long to fetch messages')), 45000);
-      });
-
-      // Race between the actual query and timeout
-      const queryPromise = supabase
-        .from('messages')
-        .select('id, content, created_at, sender_id, type, mood, sender:users(id, name, username, avatar_url)')
-        .eq('chat_id', chatId)
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
+      // Simplified query with timeout
+      const { data, error } = await Promise.race([
+        supabase
+          .from('messages')
+          .select('id, content, created_at, sender_id, type, mood, sender:users(id, name, username, avatar_url)')
+          .eq('chat_id', chatId)
+          .order('created_at', { ascending: false })
+          .limit(50),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Query timeout')), 10000) // Reduced to 10 seconds
+        )
+      ]) as any;
 
       if (error) {
-        // Handle specific timeout errors
-        if (error.code === '57014' || error.message?.includes('statement timeout')) {
-          console.warn('⚠️ Database query timeout, retrying with smaller limit...');
-          
-          // Retry with smaller limit and simpler query
-          const { data: retryData, error: retryError } = await supabase
-            .from('messages')
-            .select('id, content, created_at, sender_id, type, mood')
-            .eq('chat_id', chatId)
-            .order('created_at', { ascending: false })
-            .limit(20);
-
-          if (retryError) {
-            throw new Error(`Failed to fetch messages after retry: ${retryError.message}`);
-          }
-
-          // Fetch sender info separately for retry data
-          if (retryData && retryData.length > 0) {
-            const senderIds = [...new Set(retryData.map(msg => msg.sender_id))];
-            const { data: senders } = await supabase
-              .from('users')
-              .select('id, name, username, avatar_url')
-              .in('id', senderIds);
-
-            const messagesWithSenders = retryData.map(msg => ({
-              ...msg,
-              sender: senders?.find(sender => sender.id === msg.sender_id)
-            }));
-
-            setMessages(messagesWithSenders.reverse());
-          } else {
-            setMessages([]);
-          }
-          
-          console.log('✅ Messages fetched successfully after retry');
-          return;
-        }
-        
+        console.error('❌ Database error:', error);
         throw error;
       }
       
@@ -109,18 +67,45 @@ export function useMessages(chatId: string | null) {
     } catch (error: any) {
       console.error('❌ Error fetching messages:', error);
       
-      // Show user-friendly error message based on error type
       if (error.message?.includes('timeout') || error.code === '57014') {
-        console.warn('⚠️ Message loading is taking longer than expected');
-        // Don't throw here, just log the warning
-      } else if (error.message?.includes('Failed to fetch')) {
-        console.error('❌ Network error while fetching messages');
+        console.warn('⚠️ Message loading timed out, trying simpler query...');
+        
+        // Fallback to simpler query without joins
+        try {
+          const { data: simpleData, error: simpleError } = await supabase
+            .from('messages')
+            .select('id, content, created_at, sender_id, type, mood')
+            .eq('chat_id', chatId)
+            .order('created_at', { ascending: false })
+            .limit(30);
+
+          if (simpleError) throw simpleError;
+
+          // Fetch sender info separately
+          if (simpleData && simpleData.length > 0) {
+            const senderIds = [...new Set(simpleData.map(msg => msg.sender_id))];
+            const { data: senders } = await supabase
+              .from('users')
+              .select('id, name, username, avatar_url')
+              .in('id', senderIds);
+
+            const messagesWithSenders = simpleData.map(msg => ({
+              ...msg,
+              sender: senders?.find(sender => sender.id === msg.sender_id)
+            }));
+
+            setMessages(messagesWithSenders.reverse());
+            console.log('✅ Messages fetched with fallback query');
+          } else {
+            setMessages([]);
+          }
+        } catch (fallbackError) {
+          console.error('❌ Fallback query also failed:', fallbackError);
+          setMessages([]);
+        }
       } else {
-        console.error('❌ Unexpected error:', error.message);
+        setMessages([]);
       }
-      
-      // Set empty messages array on error to prevent infinite loading
-      setMessages([]);
     } finally {
       setLoading(false);
     }
@@ -145,7 +130,7 @@ export function useMessages(chatId: string | null) {
           console.log('🔄 New message received via real-time:', payload);
           
           try {
-            // Fetch the complete message with sender info using optimized query
+            // Fetch the complete message with sender info
             const { data } = await supabase
               .from('messages')
               .select('id, content, created_at, sender_id, type, mood, sender:users(id, name, username, avatar_url)')
@@ -174,50 +159,6 @@ export function useMessages(chatId: string | null) {
           } catch (error) {
             console.error('❌ Error fetching new message details:', error);
           }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'messages',
-          filter: `chat_id=eq.${chatId}`,
-        },
-        async (payload) => {
-          console.log('🔄 Message updated via real-time:', payload);
-          
-          try {
-            // Fetch the complete updated message with sender info using optimized query
-            const { data } = await supabase
-              .from('messages')
-              .select('id, content, created_at, sender_id, type, mood, sender:users(id, name, username, avatar_url)')
-              .eq('id', payload.new.id)
-              .maybeSingle();
-
-            if (data) {
-              setMessages(prev => 
-                prev.map(msg => msg.id === data.id ? data : msg)
-              );
-            }
-          } catch (error) {
-            console.error('❌ Error fetching updated message details:', error);
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'messages',
-          filter: `chat_id=eq.${chatId}`,
-        },
-        (payload) => {
-          console.log('🔄 Message deleted via real-time:', payload);
-          setMessages(prev => 
-            prev.filter(msg => msg.id !== payload.old.id)
-          );
         }
       )
       .subscribe((status) => {
@@ -265,28 +206,26 @@ export function useMessages(chatId: string | null) {
     // Add optimistic message immediately
     setMessages(prev => [...prev, optimisticMessage]);
 
-    // Send to database with proper error handling and timeout
+    // Send to database with reduced timeout
     try {
       console.log('🚀 Sending message to database...');
       
-      // Create timeout for message sending
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Message send timeout')), 30000);
-      });
-
-      const insertPromise = supabase
-        .from('messages')
-        .insert({
-          chat_id: chatId,
-          sender_id: user.id,
-          content: trimmedContent,
-          type,
-          mood,
-        })
-        .select('id, content, created_at, sender_id, type, mood, sender:users(id, name, username, avatar_url)')
-        .single();
-
-      const { data, error } = await Promise.race([insertPromise, timeoutPromise]) as any;
+      const { data, error } = await Promise.race([
+        supabase
+          .from('messages')
+          .insert({
+            chat_id: chatId,
+            sender_id: user.id,
+            content: trimmedContent,
+            type,
+            mood,
+          })
+          .select('id, content, created_at, sender_id, type, mood, sender:users(id, name, username, avatar_url)')
+          .single(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Message send timeout')), 15000) // Reduced to 15 seconds
+        )
+      ]) as any;
 
       if (error) {
         console.error('❌ Database error:', error);
@@ -295,7 +234,7 @@ export function useMessages(chatId: string | null) {
 
       console.log('✅ Message sent successfully:', data);
 
-      // Replace optimistic message with real one immediately
+      // Replace optimistic message with real one
       setMessages(prev => 
         prev.map(msg => 
           msg.id === optimisticId ? data : msg
@@ -305,7 +244,7 @@ export function useMessages(chatId: string | null) {
     } catch (error: any) {
       console.error('❌ Failed to send message:', error);
       
-      // Mark message as failed with retry option
+      // Mark message as failed
       setMessages(prev => 
         prev.map(msg => 
           msg.id === optimisticId 
@@ -319,8 +258,8 @@ export function useMessages(chatId: string | null) {
         )
       );
 
-      // Auto-retry after 2 seconds for timeout errors
-      if (error.message?.includes('timeout') || error.code === '57014') {
+      // Auto-retry for timeout errors
+      if (error.message?.includes('timeout')) {
         setTimeout(() => {
           console.log('🔄 Auto-retrying failed message...');
           retryMessage(trimmedContent, type, mood, optimisticId);
@@ -349,7 +288,6 @@ export function useMessages(chatId: string | null) {
     );
 
     try {
-      // Use simpler insert without complex joins for retry
       const { data, error } = await supabase
         .from('messages')
         .insert({

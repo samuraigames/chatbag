@@ -16,12 +16,12 @@ export function useAuth() {
       try {
         console.log('🔄 Initializing auth...');
         
-        // Test Supabase connection with increased timeout
+        // Test Supabase connection with reduced timeout
         try {
           const { error: healthError } = await Promise.race([
             supabase.from('users').select('count').limit(0),
             new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Connection test timeout')), 30000) // Increased to 30 seconds
+              setTimeout(() => reject(new Error('Connection test timeout')), 8000) // Reduced to 8 seconds
             )
           ]) as any;
           
@@ -33,20 +33,18 @@ export function useAuth() {
           console.error('❌ Supabase connection test failed:', error);
           if (error.message.includes('timeout')) {
             console.warn('Connection test timed out, but continuing with auth initialization...');
-            // Don't throw here, continue with auth initialization
           } else if (error.message.includes('Failed to fetch')) {
             throw new Error('Cannot reach Supabase servers. Please check if the Supabase URL is correct and accessible.');
           } else {
-            // For other errors, continue but log them
             console.warn('Connection test failed, but continuing:', error.message);
           }
         }
         
-        // Get initial session with increased timeout
+        // Get initial session with reduced timeout
         const { data: { session }, error: sessionError } = await Promise.race([
           supabase.auth.getSession(),
           new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Session timeout')), 45000) // Increased to 45 seconds
+            setTimeout(() => reject(new Error('Session timeout')), 10000) // Reduced to 10 seconds
           )
         ]) as any;
         
@@ -125,7 +123,7 @@ export function useAuth() {
     try {
       console.log('🔄 Fetching profile for user:', userId);
       
-      // Test connection before fetching profile with increased timeout
+      // Test connection before fetching profile with reduced timeout
       try {
         const { data, error } = await Promise.race([
           supabase
@@ -134,7 +132,7 @@ export function useAuth() {
             .eq('id', userId)
             .maybeSingle(),
           new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Profile fetch timeout')), 60000) // Increased to 60 seconds
+            setTimeout(() => reject(new Error('Profile fetch timeout')), 8000) // Reduced to 8 seconds
           )
         ]) as any;
 

@@ -95,7 +95,7 @@ export function ChatView({ chatId, otherUserName, otherUserAvatar, onBackToChats
   };
 
   const handleRetryMessage = async (message: Message) => {
-    if (!message.id.startsWith('failed-')) return;
+    if (!message.id.startsWith('failed-') || !message.content.includes('Failed to send:')) return;
     
     const originalContent = message.content.replace(/^(Failed to send: |Failed permanently: )/, '');
     

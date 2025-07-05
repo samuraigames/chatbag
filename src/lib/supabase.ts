@@ -56,7 +56,12 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
   realtime: {
     params: {
-      eventsPerSecond: 50
+      eventsPerSecond: 30
+    }
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'realtime-messaging-app'
     }
   }
 });
