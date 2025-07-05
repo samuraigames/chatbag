@@ -51,7 +51,7 @@ export function useMessages(chatId: string | null) {
           .order('created_at', { ascending: false })
           .limit(50),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Query timeout')), 10000) // Reduced to 10 seconds
+          setTimeout(() => reject(new Error('Query timeout')), 30000) // Increased to 30 seconds
         )
       ]) as any;
 
@@ -223,7 +223,7 @@ export function useMessages(chatId: string | null) {
           .select('id, content, created_at, sender_id, type, mood, sender:users(id, name, username, avatar_url)')
           .single(),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Message send timeout')), 15000) // Reduced to 15 seconds
+          setTimeout(() => reject(new Error('Message send timeout')), 30000) // Increased to 30 seconds
         )
       ]) as any;
 
