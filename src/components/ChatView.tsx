@@ -194,16 +194,16 @@ export function ChatView({ chatId, otherUserName, otherUserAvatar, onBackToChats
               <Sparkles className="h-4 w-4 text-yellow-400 animate-pulse" />
             </h3>
             <p className="text-sm text-emerald-400 flex items-center space-x-1">
-          <div className="flex items-center space-x-2">
-            <PresenceIndicator userId={user?.id || ''} showStatus />
+              <div className="flex items-center space-x-2">
+                <PresenceIndicator userId={user?.id || ''} showStatus />
                 {typingUsers.length > 0 ? (
                   <span className="text-yellow-400 animate-pulse">
                     {typingUsers.length === 1 ? 'typing...' : `${typingUsers.length} typing...`}
                   </span>
                 ) : (
-                  'Online'
-                ''
-              </span>
+                  <span>Online</span>
+                )}
+              </div>
             </p>
           </div>
         </div>
