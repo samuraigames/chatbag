@@ -124,4 +124,41 @@ export interface Message {
 export interface ChatWithUsers extends Chat {
   other_user?: User;
   users?: User[];
+  unread_count?: number;
+  display_name?: string;
+  display_avatar?: string;
+}
+
+export interface MessageReaction {
+  id: string;
+  message_id: string;
+  user_id: string;
+  reaction: '👍' | '👎' | '❤️' | '😂' | '😮' | '😢' | '😡';
+  created_at: string;
+  user?: User;
+}
+
+export interface MessageAttachment {
+  id: string;
+  message_id: string;
+  file_name: string;
+  file_size: number;
+  file_type: 'image' | 'file' | 'video' | 'audio';
+  file_url: string;
+  thumbnail_url?: string;
+  created_at: string;
+}
+
+export interface UserPresence {
+  user_id: string;
+  status: 'online' | 'offline' | 'away' | 'busy';
+  last_seen: string;
+  updated_at: string;
+}
+
+export interface MessageWithExtras extends Message {
+  reactions?: MessageReaction[];
+  attachments?: MessageAttachment[];
+  reply_to?: Message;
+  thread_count?: number;
 }

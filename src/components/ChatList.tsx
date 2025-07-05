@@ -1,7 +1,8 @@
 import React from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { MessageCircle, Plus, Zap, Star } from 'lucide-react';
+import { MessageCircle, Plus, Zap, Star, Bell, BellOff } from 'lucide-react';
 import { ChatWithUsers } from '../lib/supabase';
+import { PresenceIndicator } from './PresenceIndicator';
 
 interface ChatListProps {
   chats: ChatWithUsers[];
@@ -86,8 +87,10 @@ export function ChatList({
                       alt={chat.other_user?.name || 'User'}
                       className="w-14 h-14 rounded-full bg-gray-600 transition-all duration-300 group-hover:scale-110 group-hover:rotate-3 border-2 border-transparent group-hover:border-white/20"
                     />
-                    {/* Online indicator with pulse */}
-                    <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-400 rounded-full border-2 border-gray-900 animate-pulse"></div>
+                    {/* Presence indicator */}
+                    <div className="absolute bottom-0 right-0">
+                      <PresenceIndicator userId={chat.other_user?.id || ''} size="md" />
+                    </div>
                     {/* Sparkle effect */}
                     <Zap className="absolute -top-1 -right-1 w-4 h-4 text-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity duration-300 animate-pulse" />
                   </div>
@@ -97,9 +100,17 @@ export function ChatList({
                       <h3 className="font-bold truncate text-lg group-hover:text-white transition-colors duration-300">
                         {chat.other_user?.name || 'Mystery Friend'}
                       </h3>
-                      <span className="text-xs opacity-75 flex-shrink-0 ml-2 bg-black/20 px-2 py-1 rounded-full">
-                        {formatDistanceToNow(new Date(chat.updated_at), { addSuffix: true })}
-                      </span>
+                      <div className="flex items-center space-x-2 flex-shrink-0 ml-2">
+                        {/* Unread count */}
+                        {chat.unread_count && chat.unread_count > 0 && (
+                          <span className="bg-emerald-500 text-white text-xs font-bold px-2 py-1 rounded-full min-w-[20px] text-center animate-pulse">
+                            {chat.unread_count > 99 ? '99+' : chat.unread_count}
+                          </span>
+                        )}
+                        <span className="text-xs opacity-75 bg-black/20 px-2 py-1 rounded-full">
+                          {formatDistanceToNow(new Date(chat.updated_at), { addSuffix: true })}
+                        </span>
+                      </div>
                     </div>
                     
                     <p className="text-sm opacity-75 truncate mb-1 group-hover:opacity-90 transition-opacity duration-300">

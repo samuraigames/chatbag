@@ -1,11 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Smile, ArrowLeft, Heart, Sparkles, Zap, RefreshCw } from 'lucide-react';
+import { Send, Smile, ArrowLeft, Heart, Sparkles, Zap, RefreshCw, Search, MoreVertical } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { Message } from '../lib/supabase';
 import { useMessages } from '../hooks/useMessages';
 import { useTyping } from '../hooks/useTyping';
+import { usePresence } from '../hooks/usePresence';
 import { MoodSelector } from './MoodSelector';
 import { TypingIndicator } from './TypingIndicator';
+import { MessageReactions } from './MessageReactions';
+import { ReactionPicker } from './ReactionPicker';
+import { MessageSearch } from './MessageSearch';
+import { PresenceIndicator } from './PresenceIndicator';
 import { useAuth } from '../hooks/useAuth';
 
 interface ChatViewProps {
@@ -23,6 +28,8 @@ export function ChatView({ chatId, otherUserName, otherUserAvatar, onBackToChats
   const [selectedMood, setSelectedMood] = useState<'happy' | 'sad' | 'angry' | 'anxious' | 'neutral'>('neutral');
   const [showMoodSelector, setShowMoodSelector] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
+  const [showMessageSearch, setShowMessageSearch] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -187,18 +194,35 @@ export function ChatView({ chatId, otherUserName, otherUserAvatar, onBackToChats
               <Sparkles className="h-4 w-4 text-yellow-400 animate-pulse" />
             </h3>
             <p className="text-sm text-emerald-400 flex items-center space-x-1">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-              <span>
+          <div className="flex items-center space-x-2">
+            <PresenceIndicator userId={user?.id || ''} showStatus />
                 {typingUsers.length > 0 ? (
                   <span className="text-yellow-400 animate-pulse">
                     {typingUsers.length === 1 ? 'typing...' : `${typingUsers.length} typing...`}
                   </span>
                 ) : (
                   'Online'
-                )}
+                ''
               </span>
             </p>
           </div>
+        </div>
+        
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setShowMessageSearch(true)}
+            className="p-2 hover:bg-gray-700/50 rounded-full text-gray-400 transition-all duration-200 hover:scale-110 hover:text-white"
+            title="Search messages"
+          >
+            <Search className="h-5 w-5" />
+          </button>
+          
+          <button
+            className="p-2 hover:bg-gray-700/50 rounded-full text-gray-400 transition-all duration-200 hover:scale-110 hover:text-white"
+            title="More options"
+          >
+            <MoreVertical className="h-5 w-5" />
+          </button>
         </div>
       </div>
 
@@ -271,6 +295,24 @@ export function ChatView({ chatId, otherUserName, otherUserAvatar, onBackToChats
                 
                 {/* Hover effect */}
                 <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-2xl"></div>
+                
+                {/* Message Reactions */}
+                <MessageReactions 
+                  messageId={message.id}
+                  onAddReaction={() => setShowReactionPicker(message.id)}
+                />
+                
+                {/* Reaction Picker */}
+                {showReactionPicker === message.id && (
+                  <ReactionPicker
+                    isOpen={true}
+                    onClose={() => setShowReactionPicker(null)}
+                    onSelectReaction={(reaction) => {
+                      // Handle reaction selection
+                      console.log('Selected reaction:', reaction, 'for message:', message.id);
+                    }}
+                  />
+                )}
               </div>
             </div>
           );
@@ -337,6 +379,16 @@ export function ChatView({ chatId, otherUserName, otherUserAvatar, onBackToChats
           </button>
         </div>
       </div>
+      
+      {/* Message Search Modal */}
+      <MessageSearch
+        isOpen={showMessageSearch}
+        onClose={() => setShowMessageSearch(false)}
+        onSelectMessage={(chatId, messageId) => {
+          // Handle message selection - could scroll to message
+          console.log('Selected message:', messageId, 'in chat:', chatId);
+        }}
+      />
     </div>
   );
 }

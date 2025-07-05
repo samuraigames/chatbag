@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, MessageCircle, Menu, X } from 'lucide-react';
+import { Settings, MessageCircle, Menu, X, Search } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useChats } from '../hooks/useChats';
+import { usePresence } from '../hooks/usePresence';
 import { ChatList } from './ChatList';
 import { ChatView } from './ChatView';
 import { NewChatModal } from './NewChatModal';
 import { ProfileModal } from './ProfileModal';
+import { MessageSearch } from './MessageSearch';
+import { PresenceIndicator } from './PresenceIndicator';
 
 export function Layout() {
   const { profile } = useAuth();
@@ -13,8 +16,12 @@ export function Layout() {
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileUpdateAnimation, setProfileUpdateAnimation] = useState(false);
+
+  // Initialize presence tracking
+  usePresence();
 
   const selectedChat = chats.find(chat => chat.id === selectedChatId);
 
@@ -69,6 +76,9 @@ export function Layout() {
                     profileUpdateAnimation ? 'ring-2 ring-emerald-400 ring-opacity-50' : ''
                   }`}
                 />
+                <div className="absolute bottom-0 right-0">
+                  <PresenceIndicator userId={profile?.id || ''} size="sm" />
+                </div>
                 {profileUpdateAnimation && (
                   <div className="absolute inset-0 rounded-full bg-emerald-400 opacity-20 animate-ping" />
                 )}
@@ -88,8 +98,16 @@ export function Layout() {
             </div>
             <div className="flex items-center space-x-2 flex-shrink-0">
               <button
+                onClick={() => setShowGlobalSearch(true)}
+                className="p-2 hover:bg-gray-700 rounded-full text-gray-400 transition-colors"
+                title="Search all messages"
+              >
+                <Search className="h-5 w-5" />
+              </button>
+              <button
                 onClick={() => setShowProfileModal(true)}
                 className="p-2 hover:bg-gray-700 rounded-full text-gray-400 transition-colors"
+                title="Profile settings"
               >
                 <Settings className="h-5 w-5" />
               </button>
@@ -160,6 +178,16 @@ export function Layout() {
       <ProfileModal
         isOpen={showProfileModal}
         onClose={() => setShowProfileModal(false)}
+      />
+
+      <MessageSearch
+        isOpen={showGlobalSearch}
+        onClose={() => setShowGlobalSearch(false)}
+        onSelectMessage={(chatId, messageId) => {
+          setSelectedChatId(chatId);
+          setSidebarOpen(false);
+          // Could add logic to scroll to specific message
+        }}
       />
     </div>
   );
