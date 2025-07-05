@@ -21,7 +21,7 @@ export function useAuth() {
           const { error: healthError } = await Promise.race([
             supabase.from('users').select('count').limit(0),
             new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Connection test timeout')), 8000) // Reduced to 8 seconds
+              setTimeout(() => reject(new Error('Connection test timeout')), 30000) // Increased to 30 seconds
             )
           ]) as any;
           
@@ -44,7 +44,7 @@ export function useAuth() {
         const { data: { session }, error: sessionError } = await Promise.race([
           supabase.auth.getSession(),
           new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Session timeout')), 10000) // Reduced to 10 seconds
+            setTimeout(() => reject(new Error('Session timeout')), 30000) // Increased to 30 seconds
           )
         ]) as any;
         
@@ -132,7 +132,7 @@ export function useAuth() {
             .eq('id', userId)
             .maybeSingle(),
           new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Profile fetch timeout')), 8000) // Reduced to 8 seconds
+            setTimeout(() => reject(new Error('Profile fetch timeout')), 30000) // Increased to 30 seconds
           )
         ]) as any;
 
