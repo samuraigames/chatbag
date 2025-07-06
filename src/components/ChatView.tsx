@@ -296,22 +296,26 @@ export function ChatView({ chatId, otherUserName, otherUserAvatar, onBackToChats
                 {/* Hover effect */}
                 <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-2xl"></div>
                 
-                {/* Message Reactions */}
-                <MessageReactions 
-                  messageId={message.id}
-                  onAddReaction={() => setShowReactionPicker(message.id)}
-                />
-                
-                {/* Reaction Picker */}
-                {showReactionPicker === message.id && (
-                  <ReactionPicker
-                    isOpen={true}
-                    onClose={() => setShowReactionPicker(null)}
-                    onSelectReaction={(reaction) => {
-                      // Handle reaction selection
-                      console.log('Selected reaction:', reaction, 'for message:', message.id);
-                    }}
-                  />
+                {/* Message Reactions - only show for real messages with valid UUIDs */}
+                {!message.id.startsWith('temp-') && !message.id.startsWith('failed-') && (
+                  <>
+                    <MessageReactions 
+                      messageId={message.id}
+                      onAddReaction={() => setShowReactionPicker(message.id)}
+                    />
+                    
+                    {/* Reaction Picker */}
+                    {showReactionPicker === message.id && (
+                      <ReactionPicker
+                        isOpen={true}
+                        onClose={() => setShowReactionPicker(null)}
+                        onSelectReaction={(reaction) => {
+                          // Handle reaction selection
+                          console.log('Selected reaction:', reaction, 'for message:', message.id);
+                        }}
+                      />
+                    )}
+                  </>
                 )}
               </div>
             </div>

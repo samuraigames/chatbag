@@ -42,11 +42,11 @@ export function useMessages(chatId: string | null) {
     try {
       console.log('🔄 Fetching messages for chat:', chatId);
       
-      // Simplified query with timeout
+      // Fetch messages without sender data to avoid timeout
       const { data, error } = await Promise.race([
         supabase
           .from('messages')
-          .select('id, content, created_at, sender_id, type, mood, sender:users(id, name, username, avatar_url)')
+          .select('id, content, created_at, sender_id, type, mood')
           .eq('chat_id', chatId)
           .order('created_at', { ascending: false })
           .limit(50),
@@ -60,8 +60,25 @@ export function useMessages(chatId: string | null) {
         throw error;
       }
       
-      // Reverse the array to show messages in chronological order (oldest first)
-      setMessages(data ? data.reverse() : []);
+      if (data && data.length > 0) {
+        // Fetch sender info separately
+        const senderIds = [...new Set(data.map(msg => msg.sender_id))];
+        const { data: senders } = await supabase
+          .from('users')
+          .select('id, name, username, avatar_url')
+          .in('id', senderIds);
+
+        // Map sender data to messages
+        const messagesWithSenders = data.map(msg => ({
+          ...msg,
+          sender: senders?.find(sender => sender.id === msg.sender_id)
+        }));
+
+        // Reverse the array to show messages in chronological order (oldest first)
+        setMessages(messagesWithSenders.reverse());
+      } else {
+        setMessages([]);
+      }
       console.log('✅ Messages fetched successfully:', data?.length || 0);
       
     } catch (error: any) {
@@ -133,27 +150,39 @@ export function useMessages(chatId: string | null) {
             // Fetch the complete message with sender info
             const { data } = await supabase
               .from('messages')
-              .select('id, content, created_at, sender_id, type, mood, sender:users(id, name, username, avatar_url)')
+              .select('id, content, created_at, sender_id, type, mood')
               .eq('id', payload.new.id)
               .maybeSingle();
 
             if (data) {
+              // Fetch sender info separately
+              const { data: sender } = await supabase
+                .from('users')
+                .select('id, name, username, avatar_url')
+                .eq('id', data.sender_id)
+                .single();
+
+              const messageWithSender = {
+                ...data,
+                sender
+              };
+
               setMessages(prev => {
                 // Remove any optimistic message with the same content and sender
                 const filteredPrev = prev.filter(msg => {
                   if (msg.id.startsWith('temp-') && 
-                      msg.content === data.content && 
-                      msg.sender_id === data.sender_id) {
+                      msg.content === messageWithSender.content && 
+                      msg.sender_id === messageWithSender.sender_id) {
                     return false;
                   }
                   return true;
                 });
                 
                 // Check if message already exists to prevent duplicates
-                const exists = filteredPrev.some(msg => msg.id === data.id);
+                const exists = filteredPrev.some(msg => msg.id === messageWithSender.id);
                 if (exists) return filteredPrev;
                 
-                return [...filteredPrev, data];
+                return [...filteredPrev, messageWithSender];
               });
             }
           } catch (error) {
@@ -220,7 +249,7 @@ export function useMessages(chatId: string | null) {
             type,
             mood,
           })
-          .select('id, content, created_at, sender_id, type, mood, sender:users(id, name, username, avatar_url)')
+          .select('id, content, created_at, sender_id, type, mood')
           .single(),
         new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Message send timeout')), 30000) // Increased to 30 seconds
@@ -234,10 +263,25 @@ export function useMessages(chatId: string | null) {
 
       console.log('✅ Message sent successfully:', data);
 
+      // Add sender info manually since we can't fetch it in the insert query
+      const messageWithSender = {
+        ...data,
+        sender: {
+          id: user.id,
+          email: user.email || '',
+          name: profile?.name || 'You',
+          username: profile?.username || '',
+          avatar_url: profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`,
+          status_message: profile?.status_message || '',
+          last_active: new Date().toISOString(),
+          created_at: profile?.created_at || new Date().toISOString()
+        }
+      };
+
       // Replace optimistic message with real one
       setMessages(prev => 
         prev.map(msg => 
-          msg.id === optimisticId ? data : msg
+          msg.id === optimisticId ? messageWithSender : msg
         )
       );
 
