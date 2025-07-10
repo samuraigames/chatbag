@@ -8,7 +8,7 @@ export function useMessageReactions(messageId: string | null) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (messageId) {
+    if (messageId && !messageId.startsWith('temp-') && !messageId.startsWith('failed-')) {
       fetchReactions();
       const unsubscribe = subscribeToReactions();
       return unsubscribe;
@@ -18,7 +18,7 @@ export function useMessageReactions(messageId: string | null) {
   }, [messageId]);
 
   const fetchReactions = async () => {
-    if (!messageId) return;
+    if (!messageId || messageId.startsWith('temp-') || messageId.startsWith('failed-')) return;
 
     try {
       setLoading(true);
@@ -40,7 +40,7 @@ export function useMessageReactions(messageId: string | null) {
   };
 
   const subscribeToReactions = () => {
-    if (!messageId) return () => {};
+    if (!messageId || messageId.startsWith('temp-') || messageId.startsWith('failed-')) return () => {};
 
     const subscription = supabase
       .channel(`reactions:${messageId}`)
@@ -62,7 +62,7 @@ export function useMessageReactions(messageId: string | null) {
   };
 
   const addReaction = async (reaction: '👍' | '👎' | '❤️' | '😂' | '😮' | '😢' | '😡') => {
-    if (!messageId || !user) return;
+    if (!messageId || !user || messageId.startsWith('temp-') || messageId.startsWith('failed-')) return;
 
     try {
       const { error } = await supabase
@@ -80,7 +80,7 @@ export function useMessageReactions(messageId: string | null) {
   };
 
   const removeReaction = async (reaction: '👍' | '👎' | '❤️' | '😂' | '😮' | '😢' | '😡') => {
-    if (!messageId || !user) return;
+    if (!messageId || !user || messageId.startsWith('temp-') || messageId.startsWith('failed-')) return;
 
     try {
       const { error } = await supabase
